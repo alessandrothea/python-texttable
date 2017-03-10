@@ -75,10 +75,25 @@ def colortextwrap(text, width):
 #     print
 
 
+wrap = 15
+plainlines = textwrap.wrap(asci_re.sub('', astring), wrap)
+lengths = [len(l) for l in plainlines]
+linebreaks = [ sum(lengths[:l+1]) for l in xrange(len(lengths))]
+colorlinebreaks = [findscreenpos(astring, lb) for lb in linebreaks]
+
+print zip(linebreaks, colorlinebreaks)
+
+last = 0
+for pos in colorlinebreaks:
+    print astring[last:pos]
+    last = pos
+
+# translated
+print lengths, linebreaks, colorlinebreaks
 print '-'*80
-print (ruler*3)[:15]
-print '\n'.join(textwrap.wrap(asci_re.sub('', astring), 15))
+print (ruler*3)[:wrap]
+print '\n'.join(plainlines)
 print '-'*80
-print (ruler*3)[:15]
-print '\n'.join(colortextwrap(astring, 15))
+print (ruler*3)[:wrap]
+print '\n'.join(colortextwrap(astring, wrap))
 print
