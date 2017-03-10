@@ -106,7 +106,7 @@ except ImportError:
     sys.stderr.write("Can't import textwrap module!\n")
     raise
 
-_ansi_chars = re.compile('\033\[((?:\d|;)*)([a-zA-Z])')
+_ansi_chars = re.compile('(\033\[((?:\d|;)*)([a-zA-Z]))')
 
 def len(iterable):
     """Redefining len here so it will be able to work with non-ASCII characters
@@ -644,20 +644,33 @@ class Texttable:
             array = []
             original_cell = cell
             lost_color = bcolors.WHITE
-            for attr in bcolors_public_props():
-                cell = cell.replace(
-                    getattr(bcolors, attr), '').replace(bcolors.ENDC,'')
-                if cell.replace(bcolors.ENDC,'') != original_cell.replace(
-                        bcolors.ENDC,'') and attr != 'ENDC':
-                    if not lost_color:
-                        lost_color = attr
             for c in cell.split('\n'):
+                c = _ansi_chars.sub('', c)
                 if type(c) is not str:
                     try:
                         c = str(c, 'utf')
                     except UnicodeDecodeError as strerror:
                         sys.stderr.write("UnicodeDecodeError exception for string '%s': %s\n" % (c, strerror))
                         c = str(c, 'utf', 'replace')
+            # for attr in bcolors_public_props():
+            #     cell = cell.replace(
+            #         getattr(bcolors, attr), '').replace(bcolors.ENDC,'')
+            #     if cell.replace(bcolors.ENDC,'') != original_cell.replace(
+            #             bcolors.ENDC,'') and attr != 'ENDC':
+            #         if not lost_color:
+            #             lost_color = attr
+            # for c in cell.split('\n'):
+            #     if type(c) is not str:
+            #         try:
+            #             c = str(c, 'utf')
+            #         except UnicodeDecodeError as strerror:
+            #             sys.stderr.write("UnicodeDecodeError exception for string '%s': %s\n" % (c, strerror))
+            #             c = str(c, 'utf', 'replace')
+
+                lost_color = bcolors.WHITE
+                for x in textwrap.wrap(c, width):
+                    ansi = _ansi_chars.findall(x)
+
                 try:
                     array.extend(
                         [get_color_string(
