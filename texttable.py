@@ -92,7 +92,7 @@ Brian Peterson:
 
 import math
 import sys
-import string
+import re
 from functools import reduce
 
 try:
@@ -105,6 +105,8 @@ try:
 except ImportError:
     sys.stderr.write("Can't import textwrap module!\n")
     raise
+
+_ansi_chars = re.compile('\033\[((?:\d|;)*)([a-zA-Z])')
 
 def len(iterable):
     """Redefining len here so it will be able to work with non-ASCII characters
@@ -486,8 +488,7 @@ class Texttable:
         cell, such like newlines and tabs
         """
 
-        for attr in bcolors_public_props():
-            cell = cell.replace(getattr(bcolors, attr), '').replace(bcolors.ENDC,'')
+        cell = _ansi_chars.sub('', cell)
 
         cell_lines = cell.split('\n')
         maxi = 0
@@ -495,8 +496,7 @@ class Texttable:
             length = 0
             parts = line.split('\t')
             for part, i in zip(parts, list(range(1, len(parts) + 1))):
-                for attr in bcolors_public_props():
-                    part = part.replace(getattr(bcolors, attr), '')
+
                 length = length + len(part)
                 if i < len(parts):
                     length = (length//8 + 1) * 8
