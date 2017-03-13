@@ -33,6 +33,11 @@ print asci_pos
 
 wrap = 12
 
+class FormatError(Exception):
+    """docstring for FormatError."""
+    def __init__(self, *arg, **kwargs):
+        super(FormatError, self).__init__(*arg, **kwargs)
+
 
 def findscreenpos(colortext, n):
     asci_pos = [(m.group(), m.start(), m.end()) for m in ansi_re.finditer(colortext)]
@@ -74,25 +79,86 @@ def colortextwrap(text, width):
 #     print
 #     print
 
+def extract_color( line ):
+    # Find all ansi color escapes in the current line
+    col_escapes = [(m.start(), m.end(), m.group()) for m in ansi_re.finditer(astring)]
+    n_escapes = len(col_escapes)
+    # Check for errors
+    # No escapes, plain text, all good.
+    if n_escapes == 0:
+        return None
+
+    # 1 escape, ok if at the beginning of the line
+    elif n_escapes == 1:
+        s, e, g = col_escapes[0]
+
+        if s != 0:
+            raise FormatError('Color code fount at position %s when expected at 0' % s)
+
+        return g
+
+    elif n_escapes == 2:
+        s0, e0, g0 = col_escapes[0]
+        s1, e1, g1 = col_escapes[1]
+
+        # But only if the codes are at the beginning and at the end
+        if not (s0 == 0 and e1 == len(astring)):
+            raise FormatError('Argh!!!2')
+
+        # Note, should the second escape be ignored?
+        if not g1 == '\x1b[0m':
+            raise FormatError("Color escape found as enf of line while expecting none. " + repr(g1))
+
+        # return the line color
+        return g0
+
+    else:
+        raise FormatError('Found too many color escapes. Multi-color lines not expected.')
+
+
 astring = style('aaaa\na', fg='red')
 
-all_codes = [ (m.start(), m.end(), m.group()) for m in ansi_re.finditer(astring)]
+x = extract_color(astring)
+print repr(x)
+raise SystemExit(0)
+
+
+# Find all ansi codes in the string
+all_codes = [(m.start(), m.end(), m.group()) for m in ansi_re.finditer(astring)]
 
 b=''
 e=''
+
 # Check for errors
+# No codes, plain text
 if len(all_codes) == 0:
     pass
+
+# 1 codes, maybe OK
 elif len(all_codes) == 1:
+
+    # OK if the code start at pos 0
     if all_codes[0][0] == 0:
         b = all_codes[0][2][0]
+
+    # Throw otherwise
     else:
         raise RuntimeError('Argh!!!')
+
+# 2 codes, possibly very good.
 elif len(all_codes) == 2:
+
+    # But only if the codes are at the beginning and at the end
     if not (all_codes[0][0] == 0 and all_codes[1][1] == len(astring)):
         raise RuntimeError('Argh!!!2')
+
+    # Store the codes for later
     b = all_codes[0][2]
     e = all_codes[1][2]
+    # TODO: check that e is reset, i.e. \x1b[0m
+
+# More than 2 codes, not good
+
 else:
     raise RuntimeError('Argh!!!3')
 

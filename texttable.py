@@ -106,7 +106,7 @@ except ImportError:
     sys.stderr.write("Can't import textwrap module!\n")
     raise
 
-_ansi_chars = re.compile('(\033\[((?:\d|;)*)([a-zA-Z]))')
+_ansi_regex = re.compile('(\033\[((?:\d|;)*)([a-zA-Z]))')
 
 def len(iterable):
     """Redefining len here so it will be able to work with non-ASCII characters
@@ -139,14 +139,22 @@ class bcolors:
     ENDC = '\033[0m'
     WHITE = ''
 
-def bcolors_public_props():
-    return (name for name in dir(bcolors) if not name.startswith('_'))
+# def bcolors_public_props():
+    # return (name for name in dir(bcolors) if not name.startswith('_'))
 
 def get_color_string(type, string):
     end = bcolors.ENDC
     if type == bcolors.WHITE:
         end = ''
     return '%s%s%s' % (type, string, end)
+
+
+class TableFormatError(Exception):
+    """docstring for TableFormatError."""
+    def __init__(self, *arg, **kwargs):
+        super(TableFormatError, self).__init__(*arg, **kwargs)
+
+
 
 class Texttable:
 
@@ -488,7 +496,7 @@ class Texttable:
         cell, such like newlines and tabs
         """
 
-        cell = _ansi_chars.sub('', cell)
+        cell = _ansi_regex.sub('', cell)
 
         cell_lines = cell.split('\n')
         maxi = 0
@@ -585,6 +593,53 @@ class Texttable:
         if not hasattr(self, "_valign"):
             self._valign = ["t"] * self._row_size
 
+    @staticmethod
+    def _extract_color( line, last_color=None ):
+
+        # Find all ansi color escapes in the current line
+        col_escapes = [(m.start(), m.end(), m.group()) for m in _ansi_regex.finditer(line)]
+        n_escapes = len(col_escapes)
+        # Check for errors
+        # No escapes, plain text, all good. Same color as the last line.
+        if n_escapes == 0:
+            return last_color, last_color
+
+
+        # 1 escape, ok if at the beginning of the line
+        elif n_escapes == 1:
+            s, e, color = col_escapes[0]
+
+            # Detect color context termination
+            if e == len(line) and color==bcolors.ENDC:
+                # Same color as the last line, but no carry over
+                return last_color, None;
+
+            # Throw if color escapes are not at line boundaries
+            if s != 0:
+                raise TableFormatError('Color code fount at position %s when expected at 0' % s)
+
+
+            return color, color
+
+        elif n_escapes == 2:
+            s0, e0, color0 = col_escapes[0]
+            s1, e1, color1 = col_escapes[1]
+
+            # But only if the codes are at the beginning and at the end
+            if not (s0 == 0 and e1 == len(line)):
+                raise TableFormatError('Color escapes expected at line boundaries, found in the middle')
+
+            # Note, should the second escape be ignored?
+            if not color1 == bcolors.ENDC:
+                raise TableFormatError("Color escape found as end of line while expecting none. " + repr(color1))
+
+            # return the line color
+            return color0, None
+
+        else:
+            raise TableFormatError('Found too many color escapes. Multi-color lines are not supported.')
+
+
     def _draw_line(self, line, isheader=False):
         """Draw a line
 
@@ -601,23 +656,9 @@ class Texttable:
             for cell, width, align in zip(line, self._width, self._align):
                 length += 1
                 cell_line = cell[i]
-                lost_color = bcolors.WHITE
-                original_cell = cell_line
-                for attr in bcolors_public_props():
-                    cell_line = cell_line.replace(
-                        getattr(bcolors, attr), '').replace(bcolors.ENDC,''
-                    )
-                    if cell_line.replace(bcolors.ENDC,'') != original_cell.replace(
-                            bcolors.ENDC,'') and attr != 'ENDC':
-                        if not lost_color:
-                            lost_color = attr
-                fill = width - len(cell_line)
-                try:
-                    cell_line = get_color_string(
-                        getattr(bcolors, lost_color),cell_line
-                    )
-                except AttributeError:
-                    pass
+
+                fill = width - len(_ansi_regex.sub('',cell_line))
+
                 if isheader:
                     align = "c"
                 if align == "r":
@@ -643,38 +684,27 @@ class Texttable:
         for cell, width in zip(line, self._width):
             array = []
             original_cell = cell
-            lost_color = bcolors.WHITE
+            next_line_color = None
             for c in cell.split('\n'):
-                c = _ansi_chars.sub('', c)
+                # extract the line color and
+                line_color, next_line_color = self._extract_color( c, next_line_color )
+
+                if line_color is None:
+                    line_color = bcolors.WHITE
+
+                # then make the line plain
+                c = _ansi_regex.sub('', c)
                 if type(c) is not str:
                     try:
                         c = str(c, 'utf')
                     except UnicodeDecodeError as strerror:
                         sys.stderr.write("UnicodeDecodeError exception for string '%s': %s\n" % (c, strerror))
                         c = str(c, 'utf', 'replace')
-            # for attr in bcolors_public_props():
-            #     cell = cell.replace(
-            #         getattr(bcolors, attr), '').replace(bcolors.ENDC,'')
-            #     if cell.replace(bcolors.ENDC,'') != original_cell.replace(
-            #             bcolors.ENDC,'') and attr != 'ENDC':
-            #         if not lost_color:
-            #             lost_color = attr
-            # for c in cell.split('\n'):
-            #     if type(c) is not str:
-            #         try:
-            #             c = str(c, 'utf')
-            #         except UnicodeDecodeError as strerror:
-            #             sys.stderr.write("UnicodeDecodeError exception for string '%s': %s\n" % (c, strerror))
-            #             c = str(c, 'utf', 'replace')
-
-                lost_color = bcolors.WHITE
-                for x in textwrap.wrap(c, width):
-                    ansi = _ansi_chars.findall(x)
-
+                # Wrap the line if too long.
                 try:
                     array.extend(
                         [get_color_string(
-                            getattr(bcolors, lost_color),x
+                            line_color,x
                             ) for x in  textwrap.wrap(c, width)
                         ]
                     )
