@@ -594,7 +594,9 @@ class Texttable:
             self._valign = ["t"] * self._row_size
 
     @staticmethod
-    def _extract_color( line, last_color=None ):
+    def _extract_color( line, current_color=None ):
+        """Extracts the color code from line and returns the color code for the current and following line.
+        """
 
         # Find all ansi color escapes in the current line
         col_escapes = [(m.start(), m.end(), m.group()) for m in _ansi_regex.finditer(line)]
@@ -602,7 +604,7 @@ class Texttable:
         # Check for errors
         # No escapes, plain text, all good. Same color as the last line.
         if n_escapes == 0:
-            return last_color, last_color
+            return current_color, current_color
 
 
         # 1 escape, ok if at the beginning of the line
@@ -612,7 +614,7 @@ class Texttable:
             # Detect color context termination
             if e == len(line) and color==bcolors.ENDC:
                 # Same color as the last line, but no carry over
-                return last_color, None;
+                return current_color, None;
 
             # Throw if color escapes are not at line boundaries
             if s != 0:
