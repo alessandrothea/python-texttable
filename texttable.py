@@ -106,7 +106,7 @@ except ImportError:
     sys.stderr.write("Can't import textwrap module!\n")
     raise
 
-_ansi_regex = re.compile('(\033\[((?:\d|;)*)([a-zA-Z]))')
+_ansi_regex = re.compile('(\033\[((?:\d|;)*)([a-zA-Z]))+')
 
 def len(iterable):
     """Redefining len here so it will be able to work with non-ASCII characters
@@ -627,7 +627,7 @@ class Texttable:
 
             # But only if the codes are at the beginning and at the end
             if not (s0 == 0 and e1 == len(line)):
-                raise TableFormatError('Color escapes expected at line boundaries, found in the middle')
+                raise TableFormatError('Color escapes expected at line boundaries, found in the middle. ' + repr(line))
 
             # Note, should the second escape be ignored?
             if not color1 == bcolors.ENDC:
